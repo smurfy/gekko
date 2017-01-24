@@ -8,22 +8,27 @@ var batchSize = 100;
 
 var Trader = function(config) {
     _.bindAll(this);
-    if(_.isObject(config)) {
-        this.key = config.key;
-        this.secret = config.secret;
-        this.passphrase = config.passphrase;
-    }
+
+    this.post_only = false; // orders can be rejected because of this
+    this.use_sandbox = false;
     this.name = 'GDAX';
     this.import = false;
     this.scanback = false;
     this.scanbackTid = 0;
     this.scanbackResults = [];
-    this.post_only = true;
 
-    this.pair = [config.asset, config.currency].join('-').toUpperCase();
+    if(_.isObject(config)) {
+        this.key = config.key;
+        this.secret = config.secret;
+        this.passphrase = config.passphrase;
 
-    this.gdax_public = new Gdax.PublicClient(this.pair);
-    this.gdax = new Gdax.AuthenticatedClient(this.key, this.secret, this.passphrase);
+        this.pair = [config.asset, config.currency].join('-').toUpperCase();
+        this.use_sandbox = config.sandbox ? config.sandbox : false;
+        this.post_only = config.post_only ? config.post_only : false;
+    }
+
+    this.gdax_public = new Gdax.PublicClient(this.pair, this.use_sandbox ? 'https://api-public.sandbox.gdax.com' : undefined);
+    this.gdax = new Gdax.AuthenticatedClient(this.key, this.secret, this.passphrase, this.use_sandbox ? 'https://api-public.sandbox.gdax.com' : undefined);
 }
 
 // if the exchange errors we try the same call again after
@@ -51,6 +56,9 @@ Trader.prototype.retry = function(method, args) {
 
 Trader.prototype.getPortfolio = function(callback) {
     var result = function(err, response, data) {
+        if (data.hasOwnProperty('message')) {
+            return callback(data.message, []);
+        }
         var portfolio = data.map(function (account) {
                 return {
                     name: account.currency.toUpperCase(),
@@ -80,16 +88,16 @@ Trader.prototype.getFee = function(callback) {
 }
 
 Trader.prototype.buy = function(amount, price, callback) {
-    log.debug('buy');
     var buyParams = {
         'price': price,
         'size': amount,
         'product_id': this.pair,
         'post_only': this.post_only
     };
-    log.debug(buyParams);
-
     var result = function(err, response, data) {
+        if (data.hasOwnProperty('message')) {
+            return callback(data.message, null);
+        }
         callback(err, data.id);
     };
 
@@ -97,16 +105,16 @@ Trader.prototype.buy = function(amount, price, callback) {
 }
 
 Trader.prototype.sell = function(amount, price, callback) {
-    log.debug('sell');
     var sellParams = {
         'price': price,
         'size': amount,
         'product_id': this.pair,
         'post_only': this.post_only
     };
-    log.debug(sellParams);
-
     var result = function(err, response, data) {
+        if (data.hasOwnProperty('message')) {
+            return callback(data.message, null);
+        }
         callback(err, data.id);
     };
 
@@ -114,22 +122,40 @@ Trader.prototype.sell = function(amount, price, callback) {
 }
 
 Trader.prototype.checkOrder = function(order, callback) {
-    log.debug('checkOrder');
-    log.debug(order);
+
+    if (order == null) {
+        return callback('EMPTY ORDER_ID', false);
+    }
 
     var result = function(err, response, data) {
-        console.log(data);
-        callback(err, data.settled);
+        if (data.hasOwnProperty('message')) {
+            return callback(data.message, null);
+        }
+
+        var status = data.status;
+        if (status == 'done') {
+            return callback(err, true);
+        } else if (status == 'rejected') {
+            return callback(err, false);
+        } else if (status == 'pending') {
+            return callback(err, false);
+        }
+        callback(err, false);
     };
 
     this.gdax.getOrder(order, result);
 }
 
-Trader.prototype.cancelOrder = function(order, callback) {
-    log.debug('cancelOrder');
-    log.debug(order);
+Trader.prototype.cancelOrder = function(order) {
+    if (order == null) {
+        return;
+    }
 
-    this.gdax.cancelOrder(order, callback);
+    var result = function(err, response, data) {
+        //
+    };
+
+    this.gdax.cancelOrder(order, result);
 }
 
 Trader.prototype.getTrades = function(since, callback, descending) {

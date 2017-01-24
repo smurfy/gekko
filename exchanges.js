@@ -637,7 +637,7 @@ var exchanges = [
   {
     name: 'GDAX',
     slug: 'gdax',
-    direct: true,
+    direct: false,
     infinityOrder: false,
     currencies: ['USD', 'EUR', 'BTC'],
     assets: ['BTC', 'LTC', 'ETH'],
