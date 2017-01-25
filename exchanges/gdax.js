@@ -159,6 +159,7 @@ Trader.prototype.cancelOrder = function(order) {
 }
 
 Trader.prototype.getTrades = function(since, callback, descending) {
+    var args = _.toArray(arguments);
     var lastScan = 0;
 
     var process = function(err, response, data) {
